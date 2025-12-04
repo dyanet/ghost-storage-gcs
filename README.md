@@ -1,115 +1,73 @@
-# Looking for mantainer
-This plugin is not updated for working on last ghost version.
+# @dyanet/ghost-storage-gcs
 
-# Ghost Google Cloud Storage Plugin 
-A simple plugin to add Google Cloud Storage support for a Ghost Blog. 
+Google Cloud Storage adapter for Ghost CMS.
 
 ## Installation
-```bash
-cd /var/www/ghost # or wherever you ran ghost-cli, this is your ghost base directory
-npm install --save ghost-google-cloud-storage
-```
-Note that if you do not have a `package.json` file in your ghost base directory, this will warn. You do not need to add one, the `node_modules` directory will be created and populated either way. You can create one by running `npm init`.
 
-## Create storage module
 ```bash
-# This assumes that you are operating on your production environemnt, change the following variable if necessary.
-export GHOST_ENVIRONMENT=production
-# Your content path will be determined by your config file: https://docs.ghost.org/v1.0/docs/config#section-paths
-# You can run the jq command to get it for you
-export CONTENT_PATH=$(jq -r '.paths.contentPath // "."' config.${GHOST_ENVIRONMENT}.json)
-mkdir -p ${CONTENT_PATH}/adapters/storage/gcloud
-cat > ${CONTENT_PATH}/adapters/storage/gcloud/index.js << EOL
-'use strict';
-module.exports = require('ghost-google-cloud-storage');
-EOL
+cd /var/www/ghost
+npm install @dyanet/ghost-storage-gcs
+mkdir -p content/adapters/storage/gcs
+echo "module.exports = require('@dyanet/ghost-storage-gcs');" > content/adapters/storage/gcs/index.js
 ```
 
 ## Configuration
 
-Create a bucket in your google cloud project. In the storage settings you will find your project id as `x-goog-project-id`, after that you need to go to your [API Credentials](https://console.cloud.google.com/apis/credentials) settings and create a `Service account key`, choosing `JSON` as the key type.
-
-Add this key on your root ghost folder or any folder you want.
-
-Add a `storage` block to your `config.${GHOST_ENVIRONMENT}.json` as below:
+Add a `storage` block to your `config.production.json`:
 
 ```json
-"storage": {
-    "active": "gcloud",
-    "gcloud": {
-        "projectId": "Your_project_id",
-        "key": "Your_key_path",
-        "bucket": "Your_bucket_name",
-        "assetDomain": "domain-for-bucket.example.com",
-        "insecure": true,
-        "maxAge": "2678400"
+{
+  "storage": {
+    "active": "gcs",
+    "gcs": {
+      "bucket": "your-bucket-name",
+      "key": "path/to/service-account.json"
     }
+  }
 }
 ```
 
-Notes:
-- For the key path, if it is in the ghost root directory, just use the name of the file. Otherwise use an absolute path.
-- The `assetDomain` is an optional config entry, and is only required if you want to use a [custom domain](https://cloud.google.com/storage/docs/hosting-static-website) for your cloud storage bucket. Note that these instructions only allow for http, not https, as the storage servers do not present a custom certificate for your domain. Here is a [list of workarounds](https://cloud.google.com/storage/docs/static-website#https). Pair with the `"insecure": true` option to use bare http URLs.
-- The `insecure` config is also optional, and defaults to false. Set to true if you are using a custom asset domain, and do not have https configured.
-- The `maxAge` is an optional config entry, and is only required if you want to set the cache-control's max age property. It defaults to 31 days (in seconds). This is desirable if you will not be deleting and re-uploading the same file multiple times, and will reduce your bandwidth usage when paired with a CDN. It can be overridden to set the max age to something else, smaller if you would like cache entries to be revalidated quicker, larger if you would like the cache entries to last for longer than 1 month.
+## Configuration Options
 
-## Verify Ghost config
-```bash
-ghost stop
-ghost run
-```
-You will see some logs or an error if the install was not successful. Fix any errors and then run `ghost run` again until you see the `Ghost boot` log entry.
+| Option | Required | Description |
+|--------|----------|-------------|
+| `bucket` | Yes | Google Cloud Storage bucket name |
+| `key` | No | Path to service account JSON key file |
+| `projectId` | No | Google Cloud project ID |
+| `assetDomain` | No | Custom domain for serving files |
+| `insecure` | No | Use HTTP instead of HTTPS (default: false) |
+| `maxAge` | No | Cache-Control max-age in seconds (default: 2678400) |
+| `uniformBucketLevelAccess` | No | Set to `true` if bucket has uniform bucket-level access enabled (default: false) |
 
-## Restart ghost
-```bash
-ghost start
-```
+## Troubleshooting
 
-### Here is a transcript of the above, with errors
-```bash
+### "Cannot insert legacy ACL for an object when uniform bucket-level access is enabled"
 
-user@ghost:/var/www/ghost$ ghost stop
-ghost run
-Running sudo command: systemctl stop ghost_example-com
-✔ Stopping Ghost
-user@ghost:/var/www/ghost$ ghost run
-The `ghost run` command is used by the configured Ghost process manager and for debugging. If you're not running this to debug something, you should run `ghost start` instead.
-Running sudo command: node current/index.js
-[2017-10-02 16:18:26] ERROR
+This error occurs when your GCS bucket has uniform bucket-level access enabled (the default for new buckets). The plugin tries to set per-object ACLs which is not allowed with uniform access.
 
-NAME: IncorrectUsageError
-CODE: MODULE_NOT_FOUND
-MESSAGE: We have detected an error in your custom storage adapter.
+**Solution:** Add `"uniformBucketLevelAccess": true` to your configuration:
 
-level:critical
-
-IncorrectUsageError: We have detected an error in your custom storage adapter.
-    at new IncorrectUsageError (/var/www/ghost/versions/1.10.0/node_modules/ghost-ignition/lib/errors/index.js:79:23)
-    at Object.getStorage (/var/www/ghost/versions/1.10.0/core/server/adapters/storage/index.js:43:19)
-    ...
-
-# fix the issue and retry
-
-user@ghost:/var/www/ghost$ ghost run
-The `ghost run` command is used by the configured Ghost process manager and for debugging. If you're not running this to debug something, you should run `ghost start` instead.
-Running sudo command: node current/index.js
-[2017-10-02 18:31:58] INFO Ghost is running in production... 
-[2017-10-02 18:31:58] INFO Your blog is now available on http://example.com/ 
-[2017-10-02 18:31:58] INFO Ctrl+C to shut down 
-[2017-10-02 18:31:58] INFO Ghost boot 11.834s 
-^C[2017-10-02 18:32:02] WARN Ghost has shut down 
-[2017-10-02 18:32:02] WARN Your blog is now offline 
-user@ghost:/var/www/ghost$ ghost start
-✔ Validating config
-Running sudo command: systemctl start ghost_example-com
-✔ Starting Ghost
-You can access your blog at http://example.com
-
+```json
+{
+  "storage": {
+    "active": "gcs",
+    "gcs": {
+      "bucket": "your-bucket-name",
+      "key": "path/to/service-account.json",
+      "uniformBucketLevelAccess": true
+    }
+  }
+}
 ```
 
-## Contributors
-- thombuchi
-- prenaudin
-- gcochard
-- zackify
-- nkirchhoffer
+Note: With uniform bucket-level access, file visibility is controlled by bucket-level IAM policies rather than per-object ACLs.
+
+### Files uploaded with backslashes in the name (Windows)
+
+On Windows, file paths use backslashes (`\`) which can cause issues with GCS object names. Version 2.0.0+ automatically normalizes all paths to use forward slashes (`/`) for GCS compatibility.
+
+If you're using an older version, upgrade to 2.0.0 or later.
+
+## License
+
+MIT

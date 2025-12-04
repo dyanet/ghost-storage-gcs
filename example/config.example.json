@@ -1,0 +1,6 @@
+{
+  "bucket": "your-bucket-name",
+  "key": "./service-account.json",
+  "projectId": "your-project-id",
+  "uniformBucketLevelAccess": true
+}

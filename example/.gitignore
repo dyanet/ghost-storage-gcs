@@ -1,0 +1,7 @@
+node_modules/
+dist/
+config.json
+*.json
+!config.example.json
+!package.json
+!tsconfig.json

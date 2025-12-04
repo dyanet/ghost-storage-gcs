@@ -1,0 +1,17 @@
+{
+  "name": "ghost-storage-gcs-example",
+  "version": "1.0.0",
+  "description": "Example TypeScript file browser using @dyanet/ghost-storage-gcs",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@dyanet/ghost-storage-gcs": "file:../"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}
