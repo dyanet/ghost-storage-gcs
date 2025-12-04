@@ -21,7 +21,7 @@
     "plugin",
     "adapter"
   ],
-  "author": "Thomas Büchi Sagredo <thombuchi@gmail.com>",
+  "author": "Akber Ahmed Choudhry (Dyanet Inc) <akber@dyanet.com>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/dyanet/ghost-storage-gcs/issues"
