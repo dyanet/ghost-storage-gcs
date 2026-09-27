@@ -27,9 +27,9 @@ jobs:
       # on the first failure.
       fail-fast: false
       matrix:
-        # engines.node is >=18, so CI proves every line from 18 up. Current
-        # Ghost itself requires 22 or 24.
-        node-version: [18, 20, 22, 24]
+        # engines.node is >=22.12 (require() of ghost-storage-base 3, which is
+        # ESM-only), matching current Ghost's Node 22/24 requirement.
+        node-version: [22, 24, 26]
 
     steps:
       - uses: actions/checkout@v7
