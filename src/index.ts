@@ -1,5 +1,5 @@
 import { Storage, Bucket, File } from '@google-cloud/storage';
-import StorageBase from 'ghost-storage-base';
+import { StorageBase } from 'ghost-storage-base';
 import path from 'path';
 import { RequestHandler } from 'express';
 import { GStoreConfig, Image, ReadOptions } from './types';
@@ -19,7 +19,7 @@ class GStore extends StorageBase {
   private config: GStoreConfig;
 
   constructor(config: GStoreConfig) {
-    super(config);
+    super();
 
     if (!config.bucket) {
       throw new Error('Google Cloud Storage bucket is required');
@@ -67,33 +67,72 @@ class GStore extends StorageBase {
   }
 
   /**
-   * Save an image to Google Cloud Storage
+   * Upload options shared by save() and saveRaw(): cache headers, and a
+   * public ACL unless the bucket uses uniform bucket-level access.
    */
-  async save(image: Image): Promise<string> {
-    const targetDir = this.getTargetDir();
-    const targetFilename = this.normalizePathForGCS(
-      await this.getUniqueFileName(image, targetDir)
-    );
-    const baseUrl = this.getBaseUrl();
-
-    const opts: {
-      destination: string;
-      metadata: { cacheControl: string };
-      public?: boolean;
-    } = {
-      destination: targetFilename,
+  private uploadOptions(): { metadata: { cacheControl: string }; public?: boolean } {
+    const opts: { metadata: { cacheControl: string }; public?: boolean } = {
       metadata: {
         cacheControl: `public, max-age=${this.maxAge}`
       }
     };
-
-    // Only set public ACL if bucket doesn't use uniform bucket-level access
     if (!this.uniformBucketLevelAccess) {
       opts.public = true;
     }
+    return opts;
+  }
 
-    await this.bucket.upload(image.path, opts);
-    return baseUrl + targetFilename;
+  /**
+   * Save an uploaded file to Google Cloud Storage.
+   *
+   * Ghost passes a `targetDir` for some uploads (e.g. media thumbnails);
+   * otherwise the file goes in the dated `YYYY/MM` directory.
+   */
+  async save(image: Image, targetDir?: string): Promise<string> {
+    const dir = targetDir || this.getTargetDir();
+    const targetFilename = this.normalizePathForGCS(
+      await this.getUniqueFileName(image, dir)
+    );
+
+    await this.bucket.upload(image.path, {
+      destination: targetFilename,
+      ...this.uploadOptions()
+    });
+    return this.getBaseUrl() + targetFilename;
+  }
+
+  /**
+   * Write a buffer to an exact path in the bucket and return its URL.
+   * Ghost uses this for files it generates itself (e.g. resized images),
+   * where it has already chosen the path.
+   */
+  async saveRaw(buffer: Buffer, targetPath: string): Promise<string> {
+    const objectName = this.normalizePathForGCS(targetPath).replace(/^\/+/, '');
+    await this.bucket.file(objectName).save(buffer, {
+      ...this.uploadOptions(),
+      contentType: 'auto',
+      resumable: false
+    });
+    return this.getBaseUrl() + objectName;
+  }
+
+  /**
+   * Convert one of this adapter's asset URLs back to its object path
+   * (the inverse of save()/saveRaw()). Accepts either protocol for the
+   * configured asset domain, and ignores any query string or fragment.
+   */
+  urlToPath(url: string): string {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error(`Not a valid URL: ${url}`);
+    }
+    const base = new URL(this.getBaseUrl());
+    if (parsed.host !== base.host || !parsed.pathname.startsWith(base.pathname)) {
+      throw new Error(`${url} is not stored in this Google Cloud Storage bucket (${this.getBaseUrl()})`);
+    }
+    return decodeURIComponent(parsed.pathname.slice(base.pathname.length));
   }
 
   /**
@@ -146,12 +185,11 @@ class GStore extends StorageBase {
   /**
    * Delete a file from storage
    */
-  async delete(filename: string, targetDir?: string): Promise<boolean> {
+  async delete(filename: string, targetDir?: string): Promise<void> {
     const filePath = this.normalizePathForGCS(
       targetDir ? path.join(targetDir, filename) : filename
     );
     await this.bucket.file(filePath).delete();
-    return true;
   }
 }
 

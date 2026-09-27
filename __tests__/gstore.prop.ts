@@ -5,13 +5,13 @@ import { GStoreConfig } from '../src/types';
 // Mock ghost-storage-base to avoid loading the actual module
 vi.mock('ghost-storage-base', () => {
   return {
-    default: class MockStorageBase {
-      constructor(_config?: unknown) {}
+    StorageBase: class MockStorageBase {
+      constructor() {}
       getTargetDir(_baseDir?: string): string {
         return '2024/01';
       }
-      async getUniqueFileName(image: { name: string }, _targetDir: string): Promise<string> {
-        return `2024/01/${image.name}`;
+      async getUniqueFileName(image: { name: string }, targetDir: string): Promise<string> {
+        return `${targetDir}/${image.name}`;
       }
     }
   };
@@ -29,9 +29,9 @@ const mockBucket = vi.fn(() => ({
 }));
 
 vi.mock('@google-cloud/storage', () => ({
-  Storage: vi.fn(() => ({
-    bucket: mockBucket
-  })),
+  Storage: vi.fn(function () {
+    return { bucket: mockBucket };
+  }),
   Bucket: vi.fn(),
   File: vi.fn()
 }));

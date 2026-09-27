@@ -25,7 +25,7 @@ function loadCompiled(files: Record<string, unknown> = {}) {
   });
 
   const stubs: Record<string, unknown> = {
-    'ghost-storage-base': { __esModule: true, default: FakeStorageBase },
+    'ghost-storage-base': { StorageBase: FakeStorageBase },
     '@google-cloud/storage': {
       Storage: class {
         bucket() {

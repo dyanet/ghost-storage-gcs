@@ -2,6 +2,15 @@
 
 Google Cloud Storage adapter for Ghost CMS.
 
+## Versions
+
+| Adapter | Ghost | Node.js | Notes |
+|---------|-------|---------|-------|
+| **3.x** | 6.x (ghost-storage-base 3) | 22.12+ | Implements `saveRaw` / `urlToPath`; honours Ghost's `targetDir` |
+| 2.x | 5.x (ghost-storage-base 1) | 18+ | Maintenance only |
+
+Install `@dyanet/ghost-storage-gcs@2` for Ghost 5 / older Node.js.
+
 ## Installation
 
 ```bash
@@ -38,6 +47,13 @@ Add a `storage` block to your `config.production.json`:
 | `insecure` | No | Use HTTP instead of HTTPS (default: false) |
 | `maxAge` | No | Cache-Control max-age in seconds (default: 2678400) |
 | `uniformBucketLevelAccess` | No | Set to `true` if bucket has uniform bucket-level access enabled (default: false) |
+
+## Upgrading from 2.x
+
+- Requires Node.js 22.12 or later (as does current Ghost).
+- Built on `ghost-storage-base` 3 and `@google-cloud/storage` 8. No configuration changes.
+- New: `saveRaw()` writes Ghost-generated files (such as resized images) straight to the bucket, and `urlToPath()` maps an asset URL back to its object path, so Ghost features that depend on them work.
+- `delete()` now resolves to `undefined` (it resolved to `true` in 2.x), per the Ghost 6 storage contract.
 
 ## Troubleshooting
 

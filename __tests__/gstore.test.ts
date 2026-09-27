@@ -4,13 +4,13 @@ import { GStoreConfig } from '../src/types';
 // Mock ghost-storage-base
 vi.mock('ghost-storage-base', () => {
   return {
-    default: class MockStorageBase {
-      constructor(_config?: unknown) {}
+    StorageBase: class MockStorageBase {
+      constructor() {}
       getTargetDir(_baseDir?: string): string {
         return '2024/01';
       }
-      async getUniqueFileName(image: { name: string }, _targetDir: string): Promise<string> {
-        return `2024/01/${image.name}`;
+      async getUniqueFileName(image: { name: string }, targetDir: string): Promise<string> {
+        return `${targetDir}/${image.name}`;
       }
     }
   };
@@ -32,9 +32,9 @@ const mockBucket = vi.fn(() => ({
 }));
 
 vi.mock('@google-cloud/storage', () => ({
-  Storage: vi.fn(() => ({
-    bucket: mockBucket
-  })),
+  Storage: vi.fn(function () {
+    return { bucket: mockBucket };
+  }),
   Bucket: vi.fn(),
   File: vi.fn()
 }));
@@ -173,22 +173,21 @@ describe('GStore Unit Tests', () => {
   });
 
   describe('delete method', () => {
-    it('should return true on successful delete', async () => {
+    it('resolves (to undefined, per ghost-storage-base 3) after deleting the object', async () => {
       mockDelete.mockResolvedValue([{}]);
       
       const store = new GStore({ bucket: 'test-bucket' });
-      const result = await store.delete('test.jpg');
-      
-      expect(result).toBe(true);
+      await expect(store.delete('test.jpg')).resolves.toBeUndefined();
+      expect(mockFile).toHaveBeenCalledWith('test.jpg');
+      expect(mockDelete).toHaveBeenCalledTimes(1);
     });
 
     it('should handle delete with targetDir', async () => {
       mockDelete.mockResolvedValue([{}]);
       
       const store = new GStore({ bucket: 'test-bucket' });
-      const result = await store.delete('test.jpg', '2024/01');
+      await store.delete('test.jpg', '2024/01');
       
-      expect(result).toBe(true);
       // path.join uses platform-specific separators, so check the call was made with correct parts
       const calledPath = mockFile.mock.calls[0][0] as string;
       expect(calledPath).toMatch(/2024[/\\]01[/\\]test\.jpg/);
