@@ -1,0 +1,31 @@
+# Grouped, weekly updates so routine bumps arrive as one reviewable PR per
+# ecosystem instead of one per package. Security updates are raised
+# immediately regardless of this file.
+#
+# Major versions are not proposed automatically: they need a deliberate
+# compatibility check (e.g. fast-check 4 removed APIs the property tests use,
+# @types/node must track engines.node), which the monthly security pass does.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      production-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
