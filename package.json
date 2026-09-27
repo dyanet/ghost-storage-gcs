@@ -1,13 +1,19 @@
 {
   "name": "@dyanet/ghost-storage-gcs",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Google Cloud Storage adapter for Ghost",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test:coverage": "vitest run --coverage"
   },
   "repository": {
     "type": "git",
@@ -31,14 +37,15 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@google-cloud/storage": "^7.18.0",
-    "ghost-storage-base": "^1.1.1"
+    "@google-cloud/storage": "^7.22.0",
+    "ghost-storage-base": "^1.1.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
-    "fast-check": "^3.15.0",
+    "@vitest/coverage-v8": "^3.2.7",
+    "fast-check": "^3.23.2",
     "typescript": "^5.3.0",
-    "vitest": "^1.2.0"
+    "vitest": "^3.2.7"
   }
 }

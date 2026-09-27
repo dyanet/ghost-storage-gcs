@@ -156,4 +156,18 @@ class GStore extends StorageBase {
 }
 
 export default GStore;
-module.exports = GStore;
+
+// Ghost loads storage adapters with require() and expects module.exports to
+// be the class itself, so the compiled CommonJS build replaces its exports
+// object with GStore (keeping `.default` for ESM/esModuleInterop consumers).
+// Guarded so ESM-based loaders such as vitest, where `module`/`exports`
+// aren't this module's real export object, leave it alone.
+if (
+  typeof module !== 'undefined' &&
+  typeof exports !== 'undefined' &&
+  module.exports === exports &&
+  Object.prototype.toString.call(exports) !== '[object Module]'
+) {
+  module.exports = GStore;
+  module.exports.default = GStore;
+}

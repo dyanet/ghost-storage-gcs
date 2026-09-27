@@ -7,7 +7,10 @@ export default defineConfig({
     include: ['__tests__/**/*.test.ts', '__tests__/**/*.prop.ts'],
     testTimeout: 60000,
     coverage: {
-      provider: 'v8'
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/*.d.ts'],
+      reporter: ['text', 'lcov', 'json-summary']
     }
   }
 });

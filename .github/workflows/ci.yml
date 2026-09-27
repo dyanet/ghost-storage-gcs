@@ -1,0 +1,166 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+    paths-ignore:
+      - "example/**"
+      - "**.md"
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - "example/**"
+      - "**.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      # Report every Node line's real result instead of cancelling the rest
+      # on the first failure.
+      fail-fast: false
+      matrix:
+        # engines.node is >=18, so CI proves every line from 18 up. Current
+        # Ghost itself requires 22 or 24.
+        node-version: [18, 20, 22, 24]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fails on a known high/critical advisory in anything that ships to
+      # users. Dev-only advisories are left to Dependabot.
+      - name: Audit runtime dependencies
+        if: matrix.node-version == 24
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      # Ghost require()s the adapter and uses the result as the class.
+      - name: Smoke-test the built CommonJS entry point
+        run: node -e "const G=require('./'); if (typeof G!=='function'||G.default!==G) { console.error('dist does not export the adapter class'); process.exit(1) }"
+
+      - name: Coverage
+        if: matrix.node-version == 24
+        run: npm run test:coverage
+
+  # Releases happen two ways:
+  #  - a pushed v* tag, or
+  #  - merging a version bump to master: on a push to master this job checks
+  #    whether v<package.json version> is already tagged and does nothing if
+  #    it is, so ordinary commits are a no-op rather than a red "cannot
+  #    publish over" failure. It tags the commit itself afterwards; a tag
+  #    pushed with GITHUB_TOKEN does not re-trigger workflows.
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/master' && github.event_name == 'push')
+    permissions:
+      contents: write # to tag the release commit
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@dyanet"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Decide whether to release
+        id: rel
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+            if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+              echo "Tag v$TAG_VERSION does not match package.json version $PKG_VERSION"
+              exit 1
+            fi
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --tags origin "refs/tags/v$PKG_VERSION" >/dev/null; then
+            echo "v$PKG_VERSION is already tagged - nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::v$PKG_VERSION is not tagged yet - releasing it."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        if: steps.rel.outputs.release == 'true'
+        run: npm run build
+
+      - name: Publish to GitHub Packages
+        if: steps.rel.outputs.release == 'true'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          if npm view "$NAME@$VERSION" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "::notice::$NAME@$VERSION is already on GitHub Packages - skipping."
+          else
+            npm publish --registry=https://npm.pkg.github.com
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Writes its own npmrc: setup-node mapped @dyanet to GitHub Packages,
+      # and for a scoped package that mapping beats --registry.
+      - name: Publish to npmjs
+        if: steps.rel.outputs.release == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::notice::NPM_TOKEN is not set - skipping the npmjs publish."
+            exit 0
+          fi
+          NPMRC="$RUNNER_TEMP/.npmrc-npmjs"
+          umask 077
+          {
+            echo "registry=https://registry.npmjs.org/"
+            echo "@dyanet:registry=https://registry.npmjs.org/"
+            echo "//registry.npmjs.org/:_authToken=$NODE_AUTH_TOKEN"
+          } > "$NPMRC"
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          if npm view "$NAME@$VERSION" version --userconfig "$NPMRC" >/dev/null 2>&1; then
+            echo "::notice::$NAME@$VERSION is already on npmjs - skipping."
+          else
+            npm publish --userconfig "$NPMRC" --access public
+          fi
+          rm -f "$NPMRC"
+
+      - name: Tag the release commit
+        if: steps.rel.outputs.release == 'true' && github.ref == 'refs/heads/master'
+        run: |
+          TAG="v${{ steps.rel.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
